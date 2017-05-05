@@ -1,6 +1,16 @@
 package lambda;
 
 import com.amazonaws.services.lambda.runtime.Context;
+import com.atlassian.fugue.Option;
+import com.atlassian.marketplace.client.MarketplaceClient;
+import com.atlassian.marketplace.client.MarketplaceClientFactory;
+import com.atlassian.marketplace.client.MpacException;
+import com.atlassian.marketplace.client.api.VendorQuery;
+import com.atlassian.marketplace.client.http.HttpConfiguration;
+import lombok.ToString;
+
+import static com.atlassian.fugue.Option.some;
+import static java.lang.System.getenv;
 
 public class Example {
 
@@ -23,6 +33,7 @@ public class Example {
         }
     }
 
+    @ToString
     public static class ExampleResponse {
         String hello;
 
@@ -42,7 +53,20 @@ public class Example {
         }
     }
 
-    public ExampleResponse handler(ExampleRequest event, Context context) {
-        return new ExampleResponse(event.getHello());
+    public ExampleResponse handler(ExampleRequest event, Context context) throws MpacException {
+        HttpConfiguration.Credentials credentials = new HttpConfiguration.Credentials(
+                getenv("MARKETPLACE_USER"), getenv("MARKETPLACE_PASSWORD"));
+
+        HttpConfiguration config = HttpConfiguration.builder()
+                .credentials(some(credentials))
+                .build();
+
+        MarketplaceClient client = MarketplaceClientFactory.createMarketplaceClient(config);
+
+        return new ExampleResponse("" + client.vendors().find(VendorQuery.any()).totalSize());
+    }
+
+    public static void main(String[] args) throws MpacException {
+        System.out.print(new Example().handler(null, null));
     }
 }
