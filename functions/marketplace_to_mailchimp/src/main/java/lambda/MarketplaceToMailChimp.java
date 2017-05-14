@@ -33,7 +33,7 @@ import static java.lang.System.getenv;
 import static org.apache.commons.lang.StringUtils.isNotBlank;
 
 @Slf4j
-public class Example {
+public class MarketplaceToMailChimp {
 
     @ToString
     @Builder
@@ -44,7 +44,7 @@ public class Example {
 
     Supplier<MailchimpClient> mailchimpClient = Suppliers.memoize(() -> new MailchimpClient(getenv("MAILCHIMP_API_KEY")));
 
-    public Response handler(Context context) throws MpacException, IOException {
+    public Response synchronise(Context context) throws MpacException, IOException {
         HttpConfiguration.Credentials credentials = new HttpConfiguration.Credentials(
                 getenv("MARKETPLACE_USER"), getenv("MARKETPLACE_PASSWORD"));
 
@@ -129,6 +129,6 @@ public class Example {
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.print(new Example().handler(null));
+        System.out.print(new MarketplaceToMailChimp().synchronise(null));
     }
 }

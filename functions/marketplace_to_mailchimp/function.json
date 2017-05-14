@@ -1,0 +1,10 @@
+{
+  "description": "Pulling new Marketplace evaluations and pushing them to MailChimp",
+  "handler": "lambda.MarketplaceToMailChimp::synchronise",
+  "runtime": "java",
+  "timeout": 60,
+  "hooks": {
+    "build": "mvn package",
+    "clean": "mvn clean"
+  }
+}

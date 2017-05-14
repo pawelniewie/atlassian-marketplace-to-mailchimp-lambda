@@ -18,11 +18,11 @@ To set it up, edit `env.json` and fill in details:
 
 To deploy:
 
-`apex deploy -E env.json hello`
+`apex deploy -E env.json marketplace_to_mailchimp`
 
 To invoke it:
 
-`apex invoke hello`
+`apex invoke marketplace_to_mailchimp`
 
 To see logs:
 
