@@ -21,6 +21,7 @@ import com.google.common.base.Suppliers;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
 import org.joda.time.DateTime;
 import org.joda.time.LocalDate;
 import org.joda.time.Period;
@@ -30,8 +31,10 @@ import java.net.URI;
 
 import static com.atlassian.fugue.Option.some;
 import static com.google.common.collect.ImmutableList.of;
+import static java.lang.String.format;
 import static java.lang.System.getenv;
 import static java.lang.System.setOut;
+import static org.apache.commons.lang.StringUtils.isNotBlank;
 
 @Slf4j
 public class Example {
@@ -75,7 +78,7 @@ public class Example {
         }
     }
 
-    Supplier<MailchimpClient> mailchimpClient = Suppliers.memoize(() -> new MailchimpClient(getenv("MAILCHIMP_APIKEY")));
+    Supplier<MailchimpClient> mailchimpClient = Suppliers.memoize(() -> new MailchimpClient(getenv("MAILCHIMP_API_KEY")));
 
     public ExampleResponse handler(ExampleRequest event, Context context) throws MpacException, IOException {
         HttpConfiguration.Credentials credentials = new HttpConfiguration.Credentials(
@@ -132,14 +135,19 @@ public class Example {
             for (String email : c.getEmail()) {
                 EditMemberMethod.CreateOrUpdate createOrUpdate = new EditMemberMethod.CreateOrUpdate(getenv("MAILCHIMP_LIST_ID"), email);
                 createOrUpdate.status = "subscribed";
+
                 createOrUpdate.merge_fields = new MailchimpObject();
                 createOrUpdate.merge_fields.mapping.put("COMPANY", contactDetails.getCompany());
                 for (String name : c.getName()) {
                     createOrUpdate.merge_fields.mapping.put("NAME", name);
                 }
-                if ()
-                createOrUpdate.interests = new MailchimpObject();
-                createOrUpdate.interests.mapping()
+
+                String mailChimpInterest = getenv("MAILCHIMP_INTEREST_" + license.getAddonKey());
+                if (isNotBlank(mailChimpInterest)) {
+                    createOrUpdate.interests = new MailchimpObject();
+                    createOrUpdate.interests.mapping.put(mailChimpInterest, true);
+                }
+
                 try {
                     mailchimpClient.get().execute(createOrUpdate);
                 } catch (Exception e) {
