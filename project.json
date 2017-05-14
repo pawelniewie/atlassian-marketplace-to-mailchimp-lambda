@@ -1,8 +1,8 @@
 {
   "name": "marketplace",
   "description": "",
-  "memory": 128,
-  "timeout": 5,
+  "memory": 512,
+  "timeout": 30,
   "role": "arn:aws:iam::791615812720:role/marketplace_lambda_function",
   "environment": {},
   "profile": "eu"

@@ -1,86 +1,50 @@
 package lambda;
 
 import com.amazonaws.services.lambda.runtime.Context;
+import com.atlassian.fugue.Either;
 import com.atlassian.fugue.Option;
 import com.atlassian.marketplace.client.MarketplaceClient;
 import com.atlassian.marketplace.client.MarketplaceClientFactory;
 import com.atlassian.marketplace.client.MpacException;
 import com.atlassian.marketplace.client.api.*;
 import com.atlassian.marketplace.client.http.HttpConfiguration;
-import com.atlassian.marketplace.client.http.SimpleHttpResponse;
-import com.atlassian.marketplace.client.impl.DefaultMarketplaceClient;
 import com.atlassian.marketplace.client.model.License;
 import com.atlassian.marketplace.client.model.VendorSummary;
-import com.atlassian.marketplace.client.util.UriBuilder;
 import com.ecwid.maleorang.MailchimpClient;
-import com.ecwid.maleorang.MailchimpException;
 import com.ecwid.maleorang.MailchimpObject;
 import com.ecwid.maleorang.method.v3_0.lists.members.EditMemberMethod;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
+import com.google.common.collect.Lists;
+import lombok.Builder;
 import lombok.ToString;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.joda.time.DateTime;
-import org.joda.time.LocalDate;
-import org.joda.time.Period;
 
 import java.io.IOException;
-import java.net.URI;
+import java.util.List;
 
 import static com.atlassian.fugue.Option.some;
 import static com.google.common.collect.ImmutableList.of;
 import static java.lang.String.format;
 import static java.lang.System.getenv;
-import static java.lang.System.setOut;
 import static org.apache.commons.lang.StringUtils.isNotBlank;
 
 @Slf4j
 public class Example {
 
-    public static class ExampleRequest {
-        String hello;
-
-        public String getHello() {
-            return hello;
-        }
-
-        public void setHello(String hello) {
-            this.hello = hello;
-        }
-
-        public ExampleRequest(String hello) {
-            this.hello = hello;
-        }
-
-        public ExampleRequest() {
-        }
-    }
-
     @ToString
-    public static class ExampleResponse {
-        String hello;
-
-        public String getHello() {
-            return hello;
-        }
-
-        public void setHello(String hello) {
-            this.hello = hello;
-        }
-
-        public ExampleResponse(String hello) {
-            this.hello = hello;
-        }
-
-        public ExampleResponse() {
-        }
+    @Builder
+    @Value
+    public static class Response {
+        List<Either<Exception, String>> results;
     }
 
     Supplier<MailchimpClient> mailchimpClient = Suppliers.memoize(() -> new MailchimpClient(getenv("MAILCHIMP_API_KEY")));
 
-    public ExampleResponse handler(ExampleRequest event, Context context) throws MpacException, IOException {
+    public Response handler(Context context) throws MpacException, IOException {
         HttpConfiguration.Credentials credentials = new HttpConfiguration.Credentials(
                 getenv("MARKETPLACE_USER"), getenv("MARKETPLACE_PASSWORD"));
 
@@ -96,15 +60,17 @@ public class Example {
                 throw new RuntimeException("Didn't get whole collection at once which is not supported!");
             }
 
+            List<Either<Exception, String>> results = Lists.newArrayList();
             for (VendorSummary vendor : vendors) {
-                getEvaluationLicenses(client, vendor);
+                results.addAll(getEvaluationLicenses(client, vendor));
             }
 
-            return new ExampleResponse("" + vendors.totalSize());
+            return new Response(results);
         }
     }
 
-    private void getEvaluationLicenses(MarketplaceClient client, VendorSummary vendor) throws MpacException {
+    private List<Either<Exception, String>> getEvaluationLicenses(MarketplaceClient client, VendorSummary vendor) throws MpacException {
+        List<Either<Exception, String>> results = Lists.newArrayList();
         LicenseQuery licenseQuery = LicenseQuery.builder()
                 .licenseType(of("evaluation"))
                 .sortBy(some("startDate"))
@@ -114,19 +80,20 @@ public class Example {
 
         Page<License> licensePage = client.licenses(vendor).find(licenseQuery);
         for (License license : licensePage) {
-            registerNewEvaluation(license);
+            results.add(registerNewEvaluation(license));
         }
         if (licensePage.getNext().isDefined()) {
             for (PageReference<License> next : licensePage.getNext()) {
                 Page<License> nextPage = client.getMore(next);
                 for (License license : nextPage) {
-                    registerNewEvaluation(license);
+                    results.add(registerNewEvaluation(license));
                 }
             }
         }
+        return results;
     }
 
-    private void registerNewEvaluation(License license) {
+    private Either<Exception, String> registerNewEvaluation(License license) {
         License.ContactDetails contactDetails = license.getContactDetails();
 
         Option<License.Contact> contact = contactDetails.getTechnicalContact().orElse(contactDetails.getBillingContact());
@@ -142,7 +109,8 @@ public class Example {
                     createOrUpdate.merge_fields.mapping.put("NAME", name);
                 }
 
-                String mailChimpInterest = getenv("MAILCHIMP_INTEREST_" + license.getAddonKey());
+                String addonKeyEnv = StringUtils.replaceChars(license.getAddonKey(), "-.", "__");
+                String mailChimpInterest = getenv("MAILCHIMP_INTEREST_" + addonKeyEnv);
                 if (isNotBlank(mailChimpInterest)) {
                     createOrUpdate.interests = new MailchimpObject();
                     createOrUpdate.interests.mapping.put(mailChimpInterest, true);
@@ -150,14 +118,17 @@ public class Example {
 
                 try {
                     mailchimpClient.get().execute(createOrUpdate);
+                    return Either.right(email);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    return Either.left(e);
                 }
             }
         }
+
+        return Either.left(new RuntimeException("No contact was found"));
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.print(new Example().handler(null, null));
+        System.out.print(new Example().handler(null));
     }
 }
